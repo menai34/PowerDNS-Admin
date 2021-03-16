@@ -17,6 +17,7 @@ class ApiKeySchema(Schema):
     domains = fields.Embed(schema=DomainSchema, many=True)
     description = fields.String()
     key = fields.String()
+    permissions = fields.String()
 
 
 class ApiPlainKeySchema(Schema):

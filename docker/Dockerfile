@@ -1,4 +1,4 @@
-FROM alpine:3.12 AS builder
+FROM alpine:3.13 AS builder
 LABEL maintainer="k@ndk.name"
 
 ARG BUILD_DEPENDENCIES="build-base \
@@ -8,7 +8,8 @@ ARG BUILD_DEPENDENCIES="build-base \
     openldap-dev \
     python3-dev \
     xmlsec-dev \
-    yarn"
+    yarn \
+    cargo"
 
 ENV LC_ALL=en_US.UTF-8 \
     LANG=en_US.UTF-8 \
@@ -49,13 +50,13 @@ RUN mv /build/powerdnsadmin/static /tmp/static && \
     find /tmp/static/node_modules/icheck/skins/square -name '*.png' -exec cp {} /build/powerdnsadmin/static/generated \;
 
 RUN { \
-      echo "from flask_assets import Environment"; \
-      echo "assets = Environment()"; \
-      echo "assets.register('js_login', 'generated/login.js')"; \
-      echo "assets.register('js_validation', 'generated/validation.js')"; \
-      echo "assets.register('css_login', 'generated/login.css')"; \
-      echo "assets.register('js_main', 'generated/main.js')"; \
-      echo "assets.register('css_main', 'generated/main.css')"; \
+    echo "from flask_assets import Environment"; \
+    echo "assets = Environment()"; \
+    echo "assets.register('js_login', 'generated/login.js')"; \
+    echo "assets.register('js_validation', 'generated/validation.js')"; \
+    echo "assets.register('css_login', 'generated/login.css')"; \
+    echo "assets.register('js_main', 'generated/main.js')"; \
+    echo "assets.register('css_main', 'generated/main.css')"; \
     } > /build/powerdnsadmin/assets.py
 
 # Move application
@@ -68,12 +69,12 @@ RUN mkdir -p /app && \
 RUN pip install pip-autoremove && \
     pip-autoremove cssmin -y && \
     pip-autoremove jsmin -y && \
-    pip-autoremove pytest -y && \
+    pip-autoremove pytest -y -L packaging && \
     pip uninstall -y pip-autoremove && \
     apk del ${BUILD_DEPENDENCIES}
 
 # Build image
-FROM alpine:3.12
+FROM alpine:3.13
 
 ENV FLASK_APP=/app/powerdnsadmin/__init__.py \
     USER=pda

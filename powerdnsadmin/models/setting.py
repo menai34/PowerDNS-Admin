@@ -178,6 +178,203 @@ class Setting(db.Model):
             'TXT': True,
             'URI': False
         },
+        'apikey_permissions': {
+            "api-get": {
+                "description": "Read access",
+                "types": {
+                    "zone": {
+                        "roles": {
+                            "Administrator": {
+                                "default": True,
+                                "readonly": True
+                            },
+                            "Operator": {
+                                "default": True,
+                                "readonly": True
+                            },
+                            "User": {
+                                "default": True,
+                                "readonly": True
+                            }
+                        },
+                        "help": "Get zone managed by a server",
+                        "docs": "https://doc.powerdns.com/authoritative/http-api/zone.html#get--servers-server_id-zones-zone_id"
+                    },
+                    "zones": {
+                        "roles": {
+                            "Administrator": {
+                                "default": True,
+                                "readonly": True
+                            },
+                            "Operator": {
+                                "default": True,
+                                "readonly": True
+                            },
+                            "User": {
+                                "default": False,
+                                "readonly": False
+                            }
+                        },
+                        "help": "Get list all Zones in a server",
+                        "docs": "https://doc.powerdns.com/authoritative/http-api/zone.html#get--servers-server_id-zones"
+                    },
+                    "search": {
+                        "roles": {
+                            "Administrator": {
+                                "default": True,
+                                "readonly": True
+                            },
+                            "Operator": {
+                                "default": True,
+                                "readonly": True
+                            },
+                            "User": {
+                                "default": False,
+                                "readonly": False
+                            }
+                        },
+                        "help": "Search the data inside PowerDNS",
+                        "docs": "https://doc.powerdns.com/authoritative/http-api/search.html#get--servers-server_id-search-data"
+                    }
+                }
+            },
+            "api-modify": {
+                "description": "Modify access",
+                "types": {
+                    "axfr-retrieve": {
+                        "roles": {
+                            "Administrator": {
+                                "default": True,
+                                "readonly": True
+                            },
+                            "Operator": {
+                                "default": False,
+                                "readonly": False
+                            },
+                            "User": {
+                                "default": False,
+                                "readonly": False
+                            }
+                        },
+                        "help": "Retrieve slave zone from its master",
+                        "docs": "https://doc.powerdns.com/authoritative/http-api/zone.html#put--servers-server_id-zones-zone_id-axfr-retrieve"
+                    },
+                    "export": {
+                        "roles": {
+                            "Administrator": {
+                                "default": True,
+                                "readonly": True
+                            },
+                            "Operator": {
+                                "default": False,
+                                "readonly": False
+                            },
+                            "User": {
+                                "default": False,
+                                "readonly": False
+                            }
+                        },
+                        "help": "Returns the zone in AXFR format",
+                        "docs": "https://doc.powerdns.com/authoritative/http-api/zone.html#get--servers-server_id-zones-zone_id-export"
+                    },
+                    "notify": {
+                        "roles": {
+                            "Administrator": {
+                                "default": True,
+                                "readonly": True
+                            },
+                            "Operator": {
+                                "default": False,
+                                "readonly": False
+                            },
+                            "User": {
+                                "default": False,
+                                "readonly": False
+                            }
+                        },
+                        "help": "Send a DNS NOTIFY to all slaves",
+                        "docs": "https://doc.powerdns.com/authoritative/http-api/zone.html#put--servers-server_id-zones-zone_id-notify"
+                    },
+                    "rectify": {
+                        "roles": {
+                            "Administrator": {
+                                "default": True,
+                                "readonly": True
+                            },
+                            "Operator": {
+                                "default": False,
+                                "readonly": False
+                            },
+                            "User": {
+                                "default": False,
+                                "readonly": False
+                            }
+                        },
+                        "help": "Rectify the zone data",
+                        "docs": "https://doc.powerdns.com/authoritative/http-api/zone.html#put--servers-server_id-zones-zone_id-rectify"
+                    },
+                    "zone": {
+                        "roles": {
+                            "Administrator": {
+                                "default": True,
+                                "readonly": True
+                            },
+                            "Operator": {
+                                "default": True,
+                                "readonly": True
+                            },
+                            "User": {
+                                "default": False,
+                                "readonly": True
+                            }
+                        },
+                        "help": "Creates/modifies/deletes RRsets present in the payload",
+                        "docs": "https://doc.powerdns.com/authoritative/http-api/zone.html#patch--servers-server_id-zones-zone_id"
+                    },
+                    "zones": {
+                        "roles": {
+                            "Administrator": {
+                                "default": True,
+                                "readonly": True
+                            },
+                            "Operator": {
+                                "default": False,
+                                "readonly": False
+                            },
+                            "User": {
+                                "default": False,
+                                "readonly": True
+                            }
+                        },
+                        "help": "Creates a new domain",
+                        "docs": "https://doc.powerdns.com/authoritative/http-api/zone.html#post--servers-server_id-zones"
+                    }
+                }
+            },
+            "api-delete": {
+                "description": "Delete access",
+                "types": {
+                    "zone": {
+                        "roles": {
+                            "Administrator": {
+                                "default": True,
+                                "readonly": True
+                            },
+                            "Operator": {
+                                "default": False,
+                                "readonly": False
+                            },
+                            "User": {
+                                "default": False,
+                                "readonly": True
+                            }
+                        },
+                        "help": "Deletes this zone, all attached metadata and rrsets",
+                        "docs": "https://doc.powerdns.com/authoritative/http-api/zone.html#delete--servers-server_id-zones-zone_id"
+                    }
+                }
+            }
+        },
         'ttl_options': '1 minute,5 minutes,30 minutes,60 minutes,24 hours',
     }
 
@@ -267,7 +464,8 @@ class Setting(db.Model):
             else:
                 return self.defaults[setting]
         else:
-            current_app.logger.error('Unknown setting queried: {0}'.format(setting))
+            current_app.logger.error(
+                'Unknown setting queried: {0}'.format(setting))
 
     def get_records_allow_to_edit(self):
         return list(
@@ -299,3 +497,7 @@ class Setting(db.Model):
     def get_ttl_options(self):
         return [(pytimeparse.parse(ttl), ttl)
                 for ttl in self.get('ttl_options').split(',')]
+
+    def get_apikey_permissions(self):
+        apikey_permissions = self.get('apikey_permissions')
+        return apikey_permissions

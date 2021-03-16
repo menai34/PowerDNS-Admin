@@ -24,7 +24,7 @@ from ..lib.errors import (
 )
 from ..decorators import (
     api_basic_auth, api_can_create_domain, is_json, apikey_auth,
-    apikey_is_admin, apikey_can_access_domain, api_role_can,
+    apikey_is_admin, apikey_can_method, apikey_can_access_domain, api_role_can,
     apikey_or_basic_auth,
 )
 import random
@@ -202,8 +202,8 @@ def api_login_create_zone():
 
         history = History(msg='Add domain {0}'.format(
             data['name'].rstrip('.')),
-                          detail=json.dumps(data),
-                          created_by=current_user.username)
+            detail=json.dumps(data),
+            created_by=current_user.username)
         history.add()
 
         if current_user.role.name not in ['Administrator', 'Operator']:
@@ -302,7 +302,8 @@ def api_generate_apikey():
     elif not isinstance(data['domains'], (list, )):
         abort(400)
     else:
-        domains = [d['name'] if isinstance(d, dict) else d for d in data['domains']]
+        domains = [d['name'] if isinstance(
+            d, dict) else d for d in data['domains']]
 
     description = data['description'] if 'description' in data else None
 
@@ -358,7 +359,8 @@ def api_generate_apikey():
         current_app.logger.error('Error: {0}'.format(e))
         raise ApiKeyCreateFail(message='Api key create failed')
 
-    apikey.plain_key = b64encode(apikey.plain_key.encode('utf-8')).decode('utf-8')
+    apikey.plain_key = b64encode(
+        apikey.plain_key.encode('utf-8')).decode('utf-8')
     return jsonify(apikey_plain_schema.dump([apikey])[0]), 201
 
 
@@ -482,7 +484,8 @@ def api_update_apikey(apikey_id):
     elif not isinstance(data['domains'], (list, )):
         abort(400)
     else:
-        domains = [d['name'] if isinstance(d, dict) else d for d in data['domains']]
+        domains = [d['name'] if isinstance(
+            d, dict) else d for d in data['domains']]
 
     apikey = ApiKey.query.get(apikey_id)
 
@@ -772,7 +775,8 @@ def api_list_accounts(account_name):
 @api_bp.route('/pdnsadmin/accounts', methods=['POST'])
 @api_basic_auth
 def api_create_account():
-    account_exists = [] or Account.query.filter(Account.name == account_name).all()
+    account_exists = [] or Account.query.filter(
+        Account.name == account_name).all()
     if len(account_exists) > 0:
         msg = "Account name already exists"
         current_app.logger.debug(msg)
@@ -920,7 +924,7 @@ def api_remove_account_user(account_id, user_id):
     user_list = User.query.join(AccountUser).filter(
         AccountUser.account_id == account_id,
         AccountUser.user_id == user_id,
-        ).all()
+    ).all()
     if not user_list:
         abort(404)
     if not account.remove_user(user):
@@ -939,6 +943,7 @@ def api_remove_account_user(account_id, user_id):
     '/servers/<string:server_id>/zones/<string:zone_id>/<path:subpath>',
     methods=['GET', 'POST', 'PUT', 'PATCH', 'DELETE'])
 @apikey_auth
+@apikey_can_method
 @apikey_can_access_domain
 def api_zone_subpath_forward(server_id, zone_id, subpath):
     resp = helper.forward_request()
@@ -948,6 +953,7 @@ def api_zone_subpath_forward(server_id, zone_id, subpath):
 @api_bp.route('/servers/<string:server_id>/zones/<string:zone_id>',
               methods=['GET', 'PUT', 'PATCH', 'DELETE'])
 @apikey_auth
+@apikey_can_method
 @apikey_can_access_domain
 def api_zone_forward(server_id, zone_id):
     resp = helper.forward_request()
@@ -962,8 +968,8 @@ def api_zone_forward(server_id, zone_id):
                 history = History(msg='{0} zone {1} record of {2}'.format(
                     rrset_data['changetype'].lower(), rrset_data['type'],
                     rrset_data['name'].rstrip('.')),
-                                  detail=json.dumps(data),
-                                  created_by=g.apikey.description)
+                    detail=json.dumps(data),
+                    created_by=g.apikey.description)
                 history.add()
         elif request.method == 'DELETE':
             history = History(msg='Deleted zone {0}'.format(zone_id),
@@ -977,6 +983,7 @@ def api_zone_forward(server_id, zone_id):
             history.add()
     return resp.content, resp.status_code, resp.headers.items()
 
+
 @api_bp.route('/servers/<path:subpath>', methods=['GET', 'PUT'])
 @apikey_auth
 @apikey_is_admin
@@ -987,6 +994,7 @@ def api_server_sub_forward(subpath):
 
 @api_bp.route('/servers/<string:server_id>/zones', methods=['POST'])
 @apikey_auth
+@apikey_can_method
 def api_create_zone(server_id):
     resp = helper.forward_request()
 
@@ -996,11 +1004,11 @@ def api_create_zone(server_id):
 
         history = History(msg='Add domain {0}'.format(
             data['name'].rstrip('.')),
-                          detail=json.dumps(data),
-                          created_by=g.apikey.description)
+            detail=json.dumps(data),
+            created_by=g.apikey.description)
         history.add()
 
-        if g.apikey.role.name not in ['Administrator', 'Operator']:
+        if g.apikey.role.name not in ['Administrator']:
             current_app.logger.debug(
                 "Apikey is user key, assigning created domain")
             domain = Domain(name=data['name'].rstrip('.'))
@@ -1024,7 +1032,7 @@ def api_get_zones(server_id):
     else:
         resp = helper.forward_request()
         if (g.apikey.role.name not in ['Administrator', 'Operator']
-            and resp.status_code == 200):
+                and resp.status_code == 200):
             domain_list = [d['name']
                            for d in domain_schema.dump(g.apikey.domains)]
             content = json.dumps([i for i in json.loads(resp.content)
@@ -1040,6 +1048,7 @@ def api_server_forward():
     resp = helper.forward_request()
     return resp.content, resp.status_code, resp.headers.items()
 
+
 @api_bp.route('/servers/<string:server_id>', methods=['GET'])
 @apikey_auth
 def api_server_config_forward(server_id):
@@ -1047,6 +1056,8 @@ def api_server_config_forward(server_id):
     return resp.content, resp.status_code, resp.headers.items()
 
 # The endpoint to snychronize Domains in background
+
+
 @api_bp.route('/sync_domains', methods=['GET'])
 @apikey_or_basic_auth
 def sync_domains():

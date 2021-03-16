@@ -18,7 +18,7 @@ from ..models.domain import Domain
 from ..models.record import Record
 from ..models.domain_template import DomainTemplate
 from ..models.domain_template_record import DomainTemplateRecord
-from ..models.api_key import ApiKey
+from ..models.api_key import ApiKey, ApiKeyDomain, ApiKeyPermissions
 
 from ..lib.schema import ApiPlainKeySchema
 
@@ -37,7 +37,6 @@ def before_request():
     current_app.permanent_session_lifetime = datetime.timedelta(
         minutes=int(Setting().get('session_timeout')))
     session.modified = True
-
 
 
 @admin_bp.route('/pdns', methods=['GET'])
@@ -133,6 +132,7 @@ def edit_user(user_username=None):
                                create=create,
                                error=result['msg'])
 
+
 @admin_bp.route('/key/edit/<key_id>', methods=['GET', 'POST'])
 @admin_bp.route('/key/edit', methods=['GET', 'POST'])
 @login_required
@@ -143,9 +143,14 @@ def edit_key(key_id=None):
     apikey = None
     create = True
     plain_key = None
+    apikey_perms = Setting().get_apikey_permissions()
 
     if key_id:
         apikey = ApiKey.query.filter(ApiKey.id == key_id).first()
+        key_perms = json.loads(apikey.permissions.json)
+        for perm, value in key_perms.items():
+            for k, v in value.items():
+                apikey_perms[perm]['types'][k]['roles'][apikey.role.name]['default'] = v
         create = False
 
         if not apikey:
@@ -156,20 +161,43 @@ def edit_key(key_id=None):
                                key=apikey,
                                domains=domains,
                                roles=roles,
-                               create=create)
+                               create=create,
+                               apikey_perms=apikey_perms)
 
     if request.method == 'POST':
         fdata = request.form
         description = fdata['description']
         role = fdata.getlist('key_role')[0]
         doamin_list = fdata.getlist('key_multi_domain')
+        apikey_perms_update = {}
+
+        for k, v in apikey_perms.items():
+            if not apikey_perms_update.get(k):
+                apikey_perms_update.update({k: {}})
+            for perm, perm_data in v['types'].items():
+                form_obj = request.form.get('akp_{}_{}'.format(k, perm))
+                if form_obj:
+                    apikey_perms_update[k][perm] = bool(form_obj)
+                    perm_data['roles'][role]['default'] = bool(form_obj)
+                else:
+                    if perm_data['roles'][role]['readonly']:
+                        apikey_perms_update[k][perm] = perm_data['roles'][role]['default']
+                    else:
+                        apikey_perms_update[k][perm] = False
+                        perm_data['roles'][role]['default'] = False
 
         # Create new apikey
         if create:
-            domain_obj_list = Domain.query.filter(Domain.name.in_(doamin_list)).all()
+            domain_obj_list = Domain.query.filter(
+                Domain.name.in_(doamin_list)).all()
+            apikey_permissions = ApiKeyPermissions(
+                apikey_id=None,
+                json=json.dumps(apikey_perms_update)
+            )
             apikey = ApiKey(desc=description,
                             role_name=role,
-                            domains=domain_obj_list)
+                            domains=domain_obj_list,
+                            permissions=apikey_permissions)
             try:
                 apikey.create()
             except Exception as e:
@@ -178,32 +206,36 @@ def edit_key(key_id=None):
 
             plain_key = apikey_plain_schema.dump([apikey])[0]["plain_key"]
             plain_key = b64encode(plain_key.encode('utf-8')).decode('utf-8')
-            history_message =  "Created API key {0}".format(apikey.id)
+            history_message = "Created API key {0}".format(apikey.id)
 
         # Update existing apikey
         else:
             try:
-                apikey.update(role,description,doamin_list)
-                history_message =  "Updated API key {0}".format(apikey.id)
+                apikey.update(role, description, doamin_list,
+                              apikey_perms_update)
+                history_message = "Updated API key {0}".format(apikey.id)
             except Exception as e:
                 current_app.logger.error('Error: {0}'.format(e))
 
         history = History(msg=history_message,
                           detail=str({
-                            'key': apikey.id,
-                            'role': apikey.role.name,
-                            'description': apikey.description,
-                            'domain_acl': [domain.name for domain in apikey.domains]
+                              'key': apikey.id,
+                              'role': apikey.role.name,
+                              'description': apikey.description,
+                              'domain_acl': [domain.name for domain in apikey.domains],
+                              'key_permissions': apikey_perms_update
                           }),
                           created_by=current_user.username)
         history.add()
-        
+
         return render_template('admin_edit_key.html',
                                key=apikey,
                                domains=domains,
                                roles=roles,
                                create=create,
-                               plain_key=plain_key)
+                               plain_key=plain_key,
+                               apikey_perms=apikey_perms)
+
 
 @admin_bp.route('/manage-keys', methods=['GET', 'POST'])
 @login_required
@@ -217,7 +249,7 @@ def manage_keys():
             abort(500)
 
         return render_template('admin_manage_keys.html',
-                                keys=apikeys)
+                               keys=apikeys)
 
     elif request.method == 'POST':
         jdata = request.json
@@ -228,8 +260,9 @@ def manage_keys():
                 history_apikey_id = apikey.id
                 history_apikey_role = apikey.role.name
                 history_apikey_description = apikey.description
-                history_apikey_domains = [ domain.name for domain in apikey.domains]
-                
+                history_apikey_domains = [
+                    domain.name for domain in apikey.domains]
+
                 apikey.delete()
             except Exception as e:
                 current_app.logger.error('Error: {0}'.format(e))
@@ -246,10 +279,11 @@ def manage_keys():
             history.add()
 
             return make_response(
-                        jsonify({
-                            'status': 'ok',
-                            'msg': 'Key has been removed.'
-                        }), 200)
+                jsonify({
+                    'status': 'ok',
+                    'msg': 'Key has been removed.'
+                }), 200)
+
 
 @admin_bp.route('/manage-user', methods=['GET', 'POST'])
 @login_required
@@ -1256,7 +1290,8 @@ def global_search():
                     records.append(result)
                 elif result['object_type'] == 'comment':
                     # Get the actual record name, exclude the domain part
-                    result['name'] = result['name'].replace(result['zone_id'], '')
+                    result['name'] = result['name'].replace(
+                        result['zone_id'], '')
                     if result['name']:
                         result['name'] = result['name'][:-1]
                     else:

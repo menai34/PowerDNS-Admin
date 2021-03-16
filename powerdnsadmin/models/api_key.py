@@ -1,9 +1,10 @@
 import random
 import string
 import bcrypt
+import json
 from flask import current_app
 
-from .base import db, domain_apikey
+from .base import db
 from ..models.role import Role
 from ..models.domain import Domain
 
@@ -16,14 +17,25 @@ class ApiKey(db.Model):
     role_id = db.Column(db.Integer, db.ForeignKey('role.id'))
     role = db.relationship('Role', back_populates="apikeys", lazy=True)
     domains = db.relationship("Domain",
-                              secondary=domain_apikey,
+                              secondary="domain_apikey",
                               back_populates="apikeys")
+    permissions = db.relationship(
+        'ApiKeyPermissions', lazy=True, uselist=False, backref="apikey", cascade="all,delete")
 
-    def __init__(self, key=None, desc=None, role_name=None, domains=[]):
+    API_KEY_PERMISSION_METHOD = {
+        "DELETE": "api-delete",
+        "GET": "api-get",
+        "PATCH": "api-modify",
+        "POST": "api-modify",
+        "PUT": "api-modify"
+    }
+
+    def __init__(self, key=None, desc=None, role_name=None, domains=[], permissions=None):
         self.id = None
         self.description = desc
         self.role_name = role_name
         self.domains[:] = domains
+        self.permissions = permissions
         if not key:
             rand_key = ''.join(
                 random.choice(string.ascii_letters + string.digits)
@@ -40,7 +52,8 @@ class ApiKey(db.Model):
             db.session.add(self)
             db.session.commit()
         except Exception as e:
-            current_app.logger.error('Can not update api key table. Error: {0}'.format(e))
+            current_app.logger.error(
+                'Can not update api key table. Error: {0}'.format(e))
             db.session.rollback()
             raise e
 
@@ -54,7 +67,7 @@ class ApiKey(db.Model):
             db.session.rollback()
             raise e
 
-    def update(self, role_name=None, description=None, domains=None):
+    def update(self, role_name=None, description=None, domains=None, permissions=None):
         try:
             if role_name:
                 role = Role.query.filter(Role.name == role_name).first()
@@ -68,6 +81,8 @@ class ApiKey(db.Model):
                                            .filter(Domain.name.in_(domains)) \
                                            .all()
                 self.domains[:] = domain_object_list
+            if permissions:
+                self.permissions.json = json.dumps(permissions)
 
             db.session.commit()
         except Exception as e:
@@ -112,3 +127,31 @@ class ApiKey(db.Model):
                 raise Exception("Unauthorized")
 
             return apikey
+
+
+class ApiKeyDomain(db.Model):
+    __tablename__ = "domain_apikey"
+    domain_id = db.Column('domain_id', db.Integer, db.ForeignKey('domain.id'))
+    apikey_id = db.Column('apikey_id', db.Integer,
+                          db.ForeignKey('apikey.id'), primary_key=True)
+
+    def __init__(self, domain_id, apikey_id):
+        self.domain_id = domain_id
+        self.apikey_id = apikey_id
+
+    def __repr__(self):
+        return '<ApiKeyDomain {0} {1}>'.format(self.domain_id, self.apikey_id)
+
+
+class ApiKeyPermissions(db.Model):
+    __tablename__ = "apikey_permissions"
+    apikey_id = db.Column('apikey_id', db.Integer,
+                          db.ForeignKey('apikey.id'), primary_key=True)
+    json = db.Column('json', db.Text)
+
+    def __init__(self, apikey_id, json):
+        self.apikey_id = apikey_id
+        self.json = json
+
+    def __repr__(self):
+        return '<ApiKeyPermissions {0} {1}>'.format(self.apikey_id, self.json)

@@ -1,6 +1,7 @@
 import base64
 import binascii
-from functools import wraps
+import json
+from functools import wraps, reduce
 from flask import g, request, abort, current_app, render_template
 from flask_login import current_user
 
@@ -234,13 +235,40 @@ def apikey_can_access_domain(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
         apikey = g.apikey
-        if g.apikey.role.name not in ['Administrator', 'Operator']:
+        if g.apikey.role.name not in ['Administrator']:
             domains = apikey.domains
             zone_id = kwargs.get('zone_id').rstrip(".")
             domain_names = [item.name for item in domains]
 
             if zone_id not in domain_names:
                 raise DomainAccessForbidden()
+        return f(*args, **kwargs)
+
+    return decorated_function
+
+
+def apikey_can_method(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        apikey = g.apikey
+        is_allow = False
+        if apikey.role.name not in ['Administrator']:
+            perms_path = []
+            perms_dict = json.loads(apikey.permissions.json)
+            perms_path.append(ApiKey.API_KEY_PERMISSION_METHOD[request.method])
+            perms_path.append('zone' if 'zone_id' in kwargs else 'zones')
+            perms_path.append(kwargs.get('subpath', None))
+
+            is_allow = reduce(
+                lambda d, key: d.get(key)
+                if d and isinstance(d, dict) else False,
+                [key for key in perms_path if key], perms_dict
+            )
+
+            if is_allow:
+                return f(*args, **kwargs)
+            else:
+                raise NotEnoughPrivileges()
         return f(*args, **kwargs)
 
     return decorated_function
@@ -291,6 +319,7 @@ def dyndns_login_required(f):
         return f(*args, **kwargs)
 
     return decorated_function
+
 
 def apikey_or_basic_auth(f):
     @wraps(f)

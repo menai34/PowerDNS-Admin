@@ -35,7 +35,8 @@
                     <div class="box-body">
                         <div class="form-group has-feedback">
                             <label class="control-label" for="role">Role</label>
-                            <select class="key_role form-control" id="key_role" name="key_role">
+                            <select class="key_role form-control" id="key_role" name="key_role"
+                                onchange="reloadApiAccessControl(this);">
                                 {% for role in roles %}
                                 <option value="{{ role.name }}"
                                 {% if (key is not none) and (role.id==key.role.id) %}selected{% endif %}>{{ role.name }}</option>
@@ -51,6 +52,20 @@
                     </div>
                     <div class="box-header with-border">
                         <h3 class="box-title">Access Control</h3>
+                    </div>
+
+                    <div class="box-body" id="key-perms">
+                        {% if key is not none %}{% set role = key.role.name %}{% else %}{% set role = 'Administrator'%}{% endif %}
+                        {% for method, value in apikey_perms.items() %}
+                        <legend>{{ value.description }}</legend>
+                        {% for k, v in value.types.items() %}
+                        <div class="form-group">
+                            <input class="icheckbox_square-blue" type="checkbox" id="akp_{{ method }}_{{ k }}" name="akp_{{ method }}_{{ k }}" class="checkbox"
+                                {% if v.roles[role].default %}checked{% endif %} {% if v.roles[role].readonly %}disabled{% endif %}>
+                            <label for="akp_{{ method }}_{{ k }}">{{ v.help }}</label>
+                        </div>
+                        {% endfor %}
+                        {% endfor %}
                     </div>
                     <div class="box-body">
                         <p>This key will have acess to the domains on the right.</p>
@@ -141,6 +156,17 @@
         modal.modal('hide');
     }
     {% endif %}
+
+    function reloadApiAccessControl(el) {
+        var data = JSON.parse('{{ apikey_perms | tojson }}');
+        for (const [type, value] of Object.entries(data)) {
+            for (const [k, v] of Object.entries(value['types'])) {
+                var element = document.getElementById('akp_' + type + '_' + k);
+                element.checked = v['roles'][el.value]['default'];
+                element.disabled = v['roles'][el.value]['readonly'];
+            }
+        }
+    };
 </script>
 {% endblock %}
 {% block modals %}
